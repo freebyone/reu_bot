@@ -12,12 +12,29 @@
     btn.addEventListener('click', async (e) => {
         e.preventDefault()
         try {
-            const response = await fetch('http://localhost:8000/students')
+            const response = await fetch('http://localhost:8000/auth_student', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body:JSON.stringify({
+                    name: "Michael",
+                    surname: "Xer",
+                    father_name: "Yux",
+                })
+            })
             const data = await response.json()
             console.log('Received data:', data)
         } catch (error) {
             console.error('Fetch error:', error)
         }
+        // try {
+        //     const response = await fetch('http://localhost:8000/students')
+        //     const data = await response.json()
+        //     console.log('Received data:', data)
+        // } catch (error) {
+        //     console.error('Fetch error:', error)
+        // }
     })
     </script>
 </body>
