@@ -69,7 +69,7 @@ for idx, row in df.iterrows():
                 "FIO": fio_clean,
                 "id_school": school_name_to_id.get(school, None),
                 "id_product": product_name_to_id[row['Название проекта']],
-                "role": role
+                "grade": row['Класс']
             })
             
 for idx, row in df.iterrows():
@@ -94,7 +94,7 @@ for idx, row in df.iterrows():
                 "FIO": fio_clean,
                 "id_school": school_name_to_id.get(school, None),
                 "id_product": product_name_to_id[row['Название проекта']],
-                "role": role
+                "grade": row['Класс']
             })
 # Вывод результатов
 print("="*50)
@@ -104,10 +104,10 @@ for school in schools:
 
 print("\n" + "="*50)
 print("Продукты (первые 3):")
-for product in products[:3]:
+for product in products[:10]:
     print(product)
 
 print("\n" + "="*50)
 print("Участники (первые 5):")
-for student in students[:5]:
+for student in students[:10]:
     print(student)
