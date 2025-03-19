@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <button id="fetch_btn">FETCH</button>
+    <script>
+        const btn = document.querySelector('#fetch_btn')
+    btn.addEventListener('click', async (e) => {
+        e.preventDefault()
+        try {
+            const response = await fetch('http://localhost:8000/students')
+            const data = await response.json()
+            console.log('Received data:', data)
+        } catch (error) {
+            console.error('Fetch error:', error)
+        }
+    })
+    </script>
+</body>
+</html>
