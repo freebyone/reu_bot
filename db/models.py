@@ -7,15 +7,17 @@ Base = declarative_base()
 
 class School(Base):
     __tablename__ = 'schools'
-    id_school = sql.Column(sql.Integer, primary_key=True)
+    id = sql.Column(sql.Integer, primary_key=True)
+    school_name = sql.Column(sql.String(1024))
+
 
 class Product(Base):
     __tablename__ = 'products'
-    id_product = sql.Column(sql.Integer, primary_key=True)
+    id = sql.Column(sql.Integer, primary_key=True)
     section = sql.Column(sql.String(1024))
     product_name = sql.Column(sql.String(1024))
     date_time = sql.Column(sql.DateTime, default=datetime.now)
-    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id_school', ondelete="CASCADE"))
+    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     location = sql.Column(sql.String(1024))
     url_scheme = sql.Column(sql.String(1024))
     id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id_conference', ondelete="CASCADE"))
@@ -44,8 +46,8 @@ class Students(Base):
     father_name = sql.Column(sql.String(1024))
     grade = sql.Column(sql.Integer)
     
-    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id_school', ondelete="CASCADE"))
-    id_product = sql.Column(sql.Integer, sql.ForeignKey('products.id_product', ondelete="CASCADE"))
+    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
+    id_product = sql.Column(sql.Integer, sql.ForeignKey('products.id', ondelete="CASCADE"))
 
     def to_dict(self):
         """Конвертирует объект в словарь."""
@@ -60,7 +62,7 @@ class Teacher(Base):
     father_name = sql.Column(sql.String(1024))
     grade = sql.Column(sql.Integer)
     
-    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id_school', ondelete="CASCADE"))
+    id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     
     login = sql.Column(sql.String(1024))
     password = sql.Column(sql.String(1024))
