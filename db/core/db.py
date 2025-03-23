@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 async_engine = create_async_engine(
     url="postgresql+asyncpg://your_username:new_password@127.0.0.1:5432/your_database",
-    echo=False,
+    echo=True,
 ).execution_options(schema_translate_map={None:"rea_bot"})
 
 async_session_factory = async_sessionmaker(async_engine)
