@@ -3,9 +3,10 @@ import os
 import sys
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI,Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from orm import get_current_teacher
 
 current_file_path = os.path.abspath(__file__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(current_file_path))
@@ -20,6 +21,12 @@ class StudentAuthRequest(BaseModel):
     surname: str
     father_name: str
 
+class StudentInfoReq(BaseModel):
+    id: int
+
+class TeacherAuthRequest(BaseModel):
+    login: str
+    password: str
 
 def create_fastapi_app():
     app = FastAPI(title="FastAPI")
@@ -33,13 +40,26 @@ def create_fastapi_app():
         
         
     @app.get("/students")
-    async def get_resumes():
-        resumes = await AsyncORM.select_workers()
-        return resumes
+    async def get_stud():
+        students = await AsyncORM.select_students()
+        return students
+
+    @app.get("/master_classes/today")
+    async def get_mc():
+        mc = await AsyncORM.get_master_classes()
+        return mc
+
+    @app.get("/students")
+    async def auth_teacher(request: TeacherAuthRequest):
+        return await AsyncORM.select_students_by_teacher_id(teacher)
     
-    @app.post("/auth_student")
+    @app.post("/student/auth")
     async def auth_student(request: StudentAuthRequest):
         return await AsyncORM.auth_student(**request.dict())
+
+    @app.post("/student/get_info_by_id")
+    async def get_student_info(request: StudentInfoReq):
+        return await AsyncORM.find_student_data_by_id(request.id)
     
     return app
     
@@ -49,7 +69,8 @@ app = create_fastapi_app()
 async def main():
     await AsyncORM.create_tables()
     await AsyncORM.insert_students()
-    await AsyncORM.select_workers()
+    await AsyncORM.select_students()
+    await AsyncORM.create_admin("adm","password_adm_rea")
 
 
 if __name__ == "__main__":

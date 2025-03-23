@@ -2,6 +2,7 @@ from sqlalchemy.ext.declarative import declarative_base
 import sqlalchemy as sql
 from sqlalchemy.orm import class_mapper
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 Base = declarative_base()
 
@@ -20,22 +21,25 @@ class Product(Base):
     id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     location = sql.Column(sql.String(1024))
     url_scheme = sql.Column(sql.String(1024))
-    id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id_conference', ondelete="CASCADE"))
+    id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id', ondelete="CASCADE"))
 
 class Conference(Base):
     __tablename__ = 'conference'
-    id_conference = sql.Column(sql.Integer, primary_key=True)
+    id = sql.Column(sql.Integer, primary_key=True)
     name = sql.Column(sql.String(1024))
-    date = sql.Column(sql.Date)
-    time = sql.Column(sql.Time)
+    date_time= sql.Column(sql.Date)
+    time = sql.Column(sql.DateTime)
 
 class MasterClass(Base):
     __tablename__ = 'master_class'
-    id_master_class = sql.Column(sql.Integer, primary_key=True)
+    id = sql.Column(sql.Integer, primary_key=True)
     name = sql.Column(sql.String(1024))
-    time = sql.Column(sql.Time)
+    date_time = sql.Column(sql.DateTime)
     url_link = sql.Column(sql.String(1024))
-    id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id_conference', ondelete="CASCADE"))
+    id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id', ondelete="CASCADE"))
+    def to_dict(self):
+        """Конвертирует объект в словарь."""
+        return {c.key: getattr(self, c.key) for c in class_mapper(self.__class__).columns}
 
 class Students(Base):
     __tablename__ = "students"
@@ -48,6 +52,7 @@ class Students(Base):
     
     id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     id_product = sql.Column(sql.Integer, sql.ForeignKey('products.id', ondelete="CASCADE"))
+    id_teacher = sql.Column(sql.Integer, sql.ForeignKey('teachers.id', ondelete="CASCADE"))
 
     def to_dict(self):
         """Конвертирует объект в словарь."""
@@ -67,3 +72,11 @@ class Teacher(Base):
     login = sql.Column(sql.String(1024))
     password = sql.Column(sql.String(1024))
     admin = sql.Column(sql.Boolean, default=False)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)  # werkzeug
+        # self.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)  # werkzeug
+        # return bcrypt.checkpw(password.encode(), self.password_hash.encode())
