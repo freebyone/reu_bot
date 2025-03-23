@@ -3,9 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # import settings
 
 async_engine = create_async_engine(
-    url="postgresql+asyncpg://your_username:new_password@127.0.0.1:5432/your_database",
-    echo=True,
-).execution_options(schema_translate_map={None:"rea_bot"})
+    url="postgresql+asyncpg://postgres:admin@127.0.0.1:5432/reu_db",
+    echo=False,
+).execution_options(schema_translate_map={None:"reu_bot"})
 
 async_session_factory = async_sessionmaker(async_engine)
 
@@ -13,11 +13,11 @@ if __name__ == "__main__":
     """
     Check DB connection
     """
-    username = 'your_username'
-    password = 'new_password'
+    username = 'postgres'
+    password = 'admin'
     host = '127.0.0.1'
-    port = '32'
-    database = 'your_database'
+    port = '5432'
+    database = 'reu_db'
 
     connection_string = f'postgresql+psycopg2://{username}:{password}@127.0.0.1:5432/{database}'
 
