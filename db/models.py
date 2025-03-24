@@ -17,7 +17,8 @@ class Product(Base):
     id = sql.Column(sql.Integer, primary_key=True)
     section = sql.Column(sql.String(1024))
     product_name = sql.Column(sql.String(1024))
-    date_time = sql.Column(sql.DateTime, default=datetime.now)
+    date_time_start = sql.Column(sql.DateTime, default=datetime.now)
+    date_time_end = sql.Column(sql.DateTime, default=datetime.now)
     id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     location = sql.Column(sql.String(1024))
     url_scheme = sql.Column(sql.String(1024))
@@ -27,15 +28,16 @@ class Conference(Base):
     __tablename__ = 'conference'
     id = sql.Column(sql.Integer, primary_key=True)
     name = sql.Column(sql.String(1024))
-    date_time= sql.Column(sql.Date)
-    time = sql.Column(sql.DateTime)
+    date= sql.Column(sql.Date)
 
 class MasterClass(Base):
     __tablename__ = 'master_class'
     id = sql.Column(sql.Integer, primary_key=True)
     name = sql.Column(sql.String(1024))
-    date_time = sql.Column(sql.DateTime)
+    date_time_start = sql.Column(sql.DateTime, default=datetime.now)
+    date_time_end = sql.Column(sql.DateTime, default=datetime.now)
     url_link = sql.Column(sql.String(1024))
+    location = sql.Column(sql.String(1024))
     id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id', ondelete="CASCADE"))
     def to_dict(self):
         """Конвертирует объект в словарь."""
@@ -65,7 +67,6 @@ class Teacher(Base):
     surname = sql.Column(sql.String(1024))
     name = sql.Column(sql.String(1024))
     father_name = sql.Column(sql.String(1024))
-    grade = sql.Column(sql.Integer)
     
     id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     

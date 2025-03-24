@@ -6,7 +6,6 @@ import uvicorn
 from fastapi import FastAPI,Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from orm import get_current_teacher
 
 current_file_path = os.path.abspath(__file__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(current_file_path))
@@ -49,9 +48,9 @@ def create_fastapi_app():
         mc = await AsyncORM.get_master_classes()
         return mc
 
-    @app.get("/students")
-    async def auth_teacher(request: TeacherAuthRequest):
-        return await AsyncORM.select_students_by_teacher_id(teacher)
+    # @app.get("/students")
+    # async def auth_teacher(request: TeacherAuthRequest):
+    #     return await AsyncORM.select_students_by_teacher_id(teacher)
     
     @app.post("/student/auth")
     async def auth_student(request: StudentAuthRequest):

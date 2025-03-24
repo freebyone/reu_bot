@@ -120,7 +120,7 @@ class AsyncORM:
             return teacher
 
     @staticmethod
-    @auth_required
+    # @auth_required
     async def select_students_by_teacher_id(teacher: Teacher):
         async with async_session_factory() as session:
             query = select(Students).where(Students.id_teacher == teacher.id)

@@ -4,12 +4,52 @@ from sqlalchemy.orm import query
 import sqlalchemy as sql
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 import asyncio
-from db.models import School, Product, Students, Base
+from db.models import School, Product, Students, Base, Conference, Teacher, MasterClass
 from db.core.db import async_session_factory,async_engine
 import logging
 from sqlalchemy.exc import SQLAlchemyError
+from typing import Tuple
 
+def parse_date_range(date_str: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
+    """
+    Парсит строку с диапазоном дат и возвращает два объекта Timestamp (начало и конец).
+    
+    Пример входных данных: "22.04.2024 15:30-17:00"
+    """
+    if pd.isna(date_str):
+        return None, None
 
+    try:
+        # Разделяем на начальную и конечную части
+        start_str, end_str = date_str.split('-', 1)
+        
+        # Парсим начальную дату-время
+        start = pd.to_datetime(
+            start_str.strip(), 
+            format='%d.%m.%Y %H:%M', 
+            dayfirst=True,
+            utc=False
+        )
+        
+        # Извлекаем дату из начала и комбинируем с конечным временем
+        end_time = pd.to_datetime(
+            end_str.strip(), 
+            format='%H:%M', 
+        ).time()
+        
+        end = pd.to_datetime(
+            start.strftime('%d.%m.%Y') + ' ' + end_time.strftime('%H:%M'),
+            format='%d.%m.%Y %H:%M',
+            dayfirst=True,
+            utc=False
+        )
+        
+        return start, end
+    
+    except Exception as e:
+        print(f"Ошибка парсинга '{date_str}': {str(e)}")
+        return None, None
+    
 async def clear_database(engine: AsyncSession, Base):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -53,82 +93,149 @@ def parse_fio(fio: str) -> tuple:
     )
 
 async def process_data(session: AsyncSession):
-    """Основная функция обработки данных"""
+    """Основная функция обработки данных (все этапы)"""
     try:
-        df = pd.read_excel("file.xlsx", header=0, names=[
-            "Секция", "Название проекта", "Школа", "Класс", "Формат выступления", 
-            "Дата_время", "Слот", "Лидер проекта", "Школа_лидера", "Участник 1", 
-            "Школа_уч1", "Участник 2", "Школа_уч2", "Аудитория"
-        ])
+        # Загрузка всех листов Excel
+        df_projects = pd.read_excel(
+            "file.xlsx",
+            sheet_name="Проекты",  # Предполагаемое имя листа
+            header=0,
+            names=[
+                "Секция", "Название проекта", "Школа", "Класс", "Формат выступления",
+                "Дата_время", "Слот", "Лидер проекта", "Школа_лидера", 
+                "Участник 1", "Школа_уч1", "Участник 2", "Школа_уч2", "Аудитория"
+            ]
+        )
 
-        # Предварительная обработка данных
-        df = df.dropna(subset=["Школа_лидера", "Название проекта"])
-        df["Дата_время"] = pd.to_datetime(df["Дата_время"], errors="coerce")
+        df_conferences = pd.read_excel(
+            "file.xlsx",
+            sheet_name="Конференции",
+            header=0,
+            names=["Название", "Дата"]
+        )
+        
+        df_masterclass = pd.read_excel(
+            "file.xlsx",
+            sheet_name="МК",
+            header=0,
+            names=["Название мастер-класса", "Дата_время", "Ссылка", "Локация", "Конференция"]
+        )
 
-        async with session.begin():  # Главная транзакция
+        df_teachers = pd.read_excel(
+            "file.xlsx",
+            sheet_name="Учителя",
+            header=0,
+            names=["ФИО", "Школа"]
+        )
+
+        async with session.begin():
+            # 1. Обработка конференций
+            conference_cache = {}
+            for idx, row in df_conferences.iterrows():
+                conference = Conference(
+                    name=row['Название'],
+                    date=pd.to_datetime(row['Дата'])
+                )
+                session.add(conference)
+                await session.flush()
+                conference_cache[row['Название']] = conference.id
+
+            # 2. Обработка мастер-классов
+            masterclass_cache = {}
+            for idx, row in df_masterclass.iterrows():
+                conference_id = conference_cache.get(row['Конференция'])
+                if not conference_id:
+                    raise ValueError(f"Конференция {row['Конференция']} не найдена")
+                
+                start_time, end_time = parse_date_range(row['Дата_время'])
+                masterclass = MasterClass(
+                    name=row['Название мастер-класса'],
+                    date_time_start=start_time,
+                    date_time_end=end_time,
+                    url_link=row['Ссылка'],
+                    location=str(row['Локация']),
+                    id_conference=conference_id
+                )
+                session.add(masterclass)
+                await session.flush()
+                masterclass_cache[row['Название мастер-класса']] = masterclass.id
+
+            # 3. Обработка учителей (оригинальный кэш школ)
             school_cache = {}
+            for idx, row in df_teachers.iterrows():
+                school_id = await get_or_create_school(
+                    session,
+                    row['Школа'],
+                    school_cache
+                )
+                
+                surname, name, father_name = parse_fio(row['ФИО'])
+                teacher = Teacher(
+                    surname=surname,
+                    name=name,
+                    father_name=father_name,
+                    id_school=school_id
+                )
+                session.add(teacher)
+
+            # 4. Оригинальная обработка проектов и студентов 
+            school_cache_projects = {}
             product_cache = {}
+            
+            # Первый проход: проекты
+            for idx, row in df_projects.iterrows():
+                school_id = await get_or_create_school(
+                    session,
+                    row['Школа_лидера'],
+                    school_cache_projects
+                )
+                start_time, end_time = parse_date_range(row['Дата_время'])
+                product = Product(
+                    section=str(row['Секция']),
+                    product_name=str(row['Название проекта']),
+                    date_time_start=start_time,
+                    date_time_end=end_time,
+                    id_school=school_id,
+                    location=str(row['Аудитория'])
+                )
+                session.add(product)
+                await session.flush()
+                product_cache[row['Название проекта']] = product.id
 
-            # Первый проход: создание школ и продуктов
-            for idx, row in df.iterrows():
-                try:
-                    school_name = row['Школа_лидера']
-                    school_id = await get_or_create_school(session, school_name, school_cache)
+            # Второй проход: студенты
+            for idx, row in df_projects.iterrows():
+                product_id = product_cache.get(row['Название проекта'])
+                if not product_id:
+                    continue
 
-                    product = Product(
-                        section=row['Секция'],
-                        product_name=row['Название проекта'],
-                        # date_time=row['Дата_время'],
-                        id_school=school_id,
-                        location=str(row['Аудитория'])
-                    )
-                    session.add(product)
-                    await session.flush()
-                    product_cache[row['Название проекта']] = product.id
+                school_id = school_cache_projects.get(row['Школа_лидера'])
+                if not school_id:
+                    continue
 
-                except Exception as e:
-                    logging.error(f"Ошибка в строке {idx}: {str(e)}")
-                    raise  # Прерываем транзакцию
-
-            # Второй проход: создание участников
-            for idx, row in df.iterrows():
-                try:
-                    product_id = product_cache.get(row['Название проекта'])
-                    if not product_id:
+                students_data = []
+                for role in ['Лидер проекта', 'Участник 1', 'Участник 2']:
+                    fio = row[role]
+                    if pd.isna(fio):
                         continue
 
-                    school_id = school_cache.get(row['Школа_лидера'])
-                    if not school_id:
-                        raise ValueError(f"Школа '{row['Школа_лидера']}' не найдена")
+                    surname, name, father_name = parse_fio(fio)
+                    students_data.append({
+                        "surname": surname,
+                        "name": name,
+                        "father_name": father_name,
+                        "grade": row['Класс'],
+                        "id_school": school_id,
+                        "id_product": product_id
+                    })
 
-                    students = []
-                    for role in ['Лидер проекта', 'Участник 1', 'Участник 2']:
-                        fio = row[role]
-                        if pd.isna(fio):
-                            continue
+                if students_data:
+                    await session.execute(insert(Students), students_data)
 
-                        surname, name, father_name = parse_fio(fio)
-                        
-                        students.append({
-                            "surname": surname,
-                            "name": name,
-                            "father_name": father_name,
-                            "grade": int(row['Класс']) if pd.notna(row['Класс']) else None,
-                            "id_school": school_id,
-                            "id_product": product_id
-                        })
-                    #await session.execute(query(Students).add_all(students))
-                    # Пакетная вставка студентов
-                    if students:
-                        await session.execute(
-                            insert(Students),
-                            students
-                        )
-                        
-                except Exception as e:
-                    logging.error(f"Ошибка в строке {idx}: {str(e)}")
-                    raise
-
+    except Exception as e:
+        logging.error(f"Ошибка: {str(e)}")
+        await session.rollback()
+        raise  
+    
     except SQLAlchemyError as e:
         logging.error(f"Ошибка базы данных: {str(e)}")
         raise
@@ -137,6 +244,7 @@ async def process_data(session: AsyncSession):
         raise
 
 async def main():
+    
     try:
         # Очистка и инициализация БД
         async with async_engine.begin() as conn:
