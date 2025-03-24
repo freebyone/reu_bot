@@ -95,41 +95,57 @@ class AsyncORM:
             return {"status": "not_found", "message": "Студент не найден"}
 
 
-
-
-    async def get_current_teacher(credentials: HTTPBasicCredentials = Depends(security)):
+    @staticmethod
+    async def auth_teacher(login, password):
         async with async_session_factory() as session:
             # Ищем учителя по логину
-            query = select(Teacher).where(Teacher.login == credentials.username)
+            query = select(Teacher).where(Teacher.login == login)
             result = await session.execute(query)
-            teacher = result.scalar_one_or_none()
+            teacher = result.scalars().first()
             
             if not teacher:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Неверный логин или пароль",
-                )
+                return {"status": "not_found", "message": "Учитель не найден"}
                 
             # Проверяем пароль
-            if not teacher.check_password(credentials.password):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Неверный логин или пароль",
-                )
+            if not teacher.check_password(password):
+                return {"status": "not_found", "message": "Неверный логин или пароль"}
+            teacher = teacher.to_dict()
+            return {"status": "success", "data":teacher,"admin":teacher['admin']}
+
+    # async def get_current_teacher(credentials: HTTPBasicCredentials = Depends(security)):
+    #     async with async_session_factory() as session:
+    #         # Ищем учителя по логину
+    #         query = select(Teacher).where(Teacher.login == credentials.username)
+    #         result = await session.execute(query)
+    #         teacher = result.scalar_one_or_none()
+            
+    #         if not teacher:
+    #             raise HTTPException(
+    #                 status_code=status.HTTP_401_UNAUTHORIZED,
+    #                 detail="Неверный логин или пароль",
+    #             )
                 
-            return teacher
+    #         # Проверяем пароль
+    #         if not teacher.check_password(credentials.password):
+    #             raise HTTPException(
+    #                 status_code=status.HTTP_401_UNAUTHORIZED,
+    #                 detail="Неверный логин или пароль",
+    #             )
+                
+    #         return teacher
+            
 
     @staticmethod
     # @auth_required
-    async def select_students_by_teacher_id(teacher: Teacher):
+    async def select_students_by_school_id(id_school):
         async with async_session_factory() as session:
-            query = select(Students).where(Students.id_teacher == teacher.id)
+            # Получаем всех студентов учителя с указанным id учебного заведения
+            query = select(Students).where(Students.id_school == id_school)
             result = await session.execute(query)
             students = result.scalars().all()
             
             return {
                 "students": [s.to_dict() for s in students],
-                "admin": "true" if teacher.admin else "false"
             }
 
     @staticmethod
@@ -193,7 +209,7 @@ class AsyncORM:
             print(date_time)
             print('\n')
             #TODO: порешать вопросик с датами
-            query = select(MasterClass).where(MasterClass.date_time == date_time)
+            query = select(MasterClass).where(MasterClass.date_time_start == date_time)
             result = await session.execute(query)
             master_classes = result.scalars().all()
             mc_list = [master_class.to_dict() for master_class in master_classes]

@@ -54,7 +54,6 @@ class Students(Base):
     
     id_school = sql.Column(sql.Integer, sql.ForeignKey('schools.id', ondelete="CASCADE"))
     id_product = sql.Column(sql.Integer, sql.ForeignKey('products.id', ondelete="CASCADE"))
-    id_teacher = sql.Column(sql.Integer, sql.ForeignKey('teachers.id', ondelete="CASCADE"))
 
     def to_dict(self):
         """Конвертирует объект в словарь."""
@@ -75,9 +74,13 @@ class Teacher(Base):
     admin = sql.Column(sql.Boolean, default=False)
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)  # werkzeug
+        self.password = generate_password_hash(password)  # werkzeug
         # self.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)  # werkzeug
+        return check_password_hash(self.password, password)  # werkzeug
         # return bcrypt.checkpw(password.encode(), self.password_hash.encode())
+        
+    def to_dict(self):
+        """Конвертирует объект в словарь."""
+        return {c.key: getattr(self, c.key) for c in class_mapper(self.__class__).columns}

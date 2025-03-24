@@ -22,7 +22,7 @@ def parse_date_range(date_str: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
     try:
         # Разделяем на начальную и конечную части
         start_str, end_str = date_str.split('-', 1)
-        
+        # print(start_str,"\n", end_str)
         # Парсим начальную дату-время
         start = pd.to_datetime(
             start_str.strip(), 
@@ -30,13 +30,14 @@ def parse_date_range(date_str: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
             dayfirst=True,
             utc=False
         )
+        # print(start,"\n----",date_str.split('-', 1)[0].split(' ',1)[0]+f" {end_str}")
         
         # Извлекаем дату из начала и комбинируем с конечным временем
         end_time = pd.to_datetime(
             end_str.strip(), 
             format='%H:%M', 
         ).time()
-        
+
         end = pd.to_datetime(
             start.strftime('%d.%m.%Y') + ' ' + end_time.strftime('%H:%M'),
             format='%d.%m.%Y %H:%M',
@@ -64,7 +65,7 @@ async def get_or_create_school(session: AsyncSession, school_name: str, cache: d
     school_name = str(school_name).strip()
     if not school_name:
         return None
-    print(f"PRIONTIRNT: {school_name}\n\n --- {cache}")
+    # print(f"PRIONTIRNT: {school_name}\n\n --- {cache}")
     if school_name in cache:
         return cache[school_name]
     
@@ -92,12 +93,12 @@ def parse_fio(fio: str) -> tuple:
         ' '.join(parts[2:]) if len(parts) > 2 else None
     )
 
-async def process_data(session: AsyncSession):
+async def process_data(session: AsyncSession,filename: str = "file.xlsx"):
     """Основная функция обработки данных (все этапы)"""
     try:
         # Загрузка всех листов Excel
         df_projects = pd.read_excel(
-            "file.xlsx",
+            filename,
             sheet_name="Проекты",  # Предполагаемое имя листа
             header=0,
             names=[
@@ -127,6 +128,13 @@ async def process_data(session: AsyncSession):
             header=0,
             names=["ФИО", "Школа"]
         )
+        
+        df_admin = pd.read_excel(
+            "file.xlsx",
+            sheet_name="admin",
+            header=0,
+            names=["login", "password"]
+        )
 
         async with session.begin():
             # 1. Обработка конференций
@@ -137,7 +145,9 @@ async def process_data(session: AsyncSession):
                     date=pd.to_datetime(row['Дата'])
                 )
                 session.add(conference)
+                # print(conference.id,"\n================================================================")
                 await session.flush()
+                # print(conference.id,"\n================================================================")
                 conference_cache[row['Название']] = conference.id
 
             # 2. Обработка мастер-классов
@@ -159,7 +169,13 @@ async def process_data(session: AsyncSession):
                 session.add(masterclass)
                 await session.flush()
                 masterclass_cache[row['Название мастер-класса']] = masterclass.id
-
+            for idx, row in df_admin.iterrows():
+                teacher = Teacher(
+                    login=str(row['login']),
+                    admin=True,
+                )
+                teacher.set_password(row['password'])
+                session.add(teacher)
             # 3. Обработка учителей (оригинальный кэш школ)
             school_cache = {}
             for idx, row in df_teachers.iterrows():
@@ -170,14 +186,18 @@ async def process_data(session: AsyncSession):
                 )
                 
                 surname, name, father_name = parse_fio(row['ФИО'])
+                
                 teacher = Teacher(
                     surname=surname,
                     name=name,
                     father_name=father_name,
-                    id_school=school_id
+                    id_school=school_id,
+                    login=str("admin"),
                 )
+                teacher.set_password("admin")
                 session.add(teacher)
-
+                # print(teacher.password)
+                # print("\n")
             # 4. Оригинальная обработка проектов и студентов 
             school_cache_projects = {}
             product_cache = {}
@@ -201,7 +221,7 @@ async def process_data(session: AsyncSession):
                 session.add(product)
                 await session.flush()
                 product_cache[row['Название проекта']] = product.id
-
+            
             # Второй проход: студенты
             for idx, row in df_projects.iterrows():
                 product_id = product_cache.get(row['Название проекта'])
@@ -243,8 +263,8 @@ async def process_data(session: AsyncSession):
         logging.error(f"Общая ошибка: {str(e)}")
         raise
 
-async def main():
-    
+async def start_parse_excel():
+    filename = "file.xlsx"
     try:
         # Очистка и инициализация БД
         async with async_engine.begin() as conn:
@@ -253,8 +273,9 @@ async def main():
         
         # Основной процесс
         async with async_session_factory() as session:
-            await process_data(session)
-            
+            await process_data(session,filename)
+        logging.info("Файл загружен")
+        print(f"\nФайл загружен - {filename}\n")
     except Exception as e:
         logging.critical(f"Критическая ошибка: {str(e)}")
     finally:
@@ -269,7 +290,7 @@ if __name__ == "__main__":
             logging.StreamHandler()
         ]
     )
-    asyncio.run(main())
+    asyncio.run(start_parse_excel())
     # Настройка подключения (замените параметры на свои)
     # async_engine = create_async_engine(
     #     "postgresql+asyncpg://user:password@localhost/dbname",

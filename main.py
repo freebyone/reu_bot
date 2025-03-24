@@ -6,6 +6,8 @@ import uvicorn
 from fastapi import FastAPI,Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import logging
+from excel_processor import start_parse_excel
 
 current_file_path = os.path.abspath(__file__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(current_file_path))
@@ -27,6 +29,9 @@ class TeacherAuthRequest(BaseModel):
     login: str
     password: str
 
+class StudentFindReq(BaseModel):
+    id_school: int
+
 def create_fastapi_app():
     app = FastAPI(title="FastAPI")
     app.add_middleware(
@@ -42,6 +47,11 @@ def create_fastapi_app():
     async def get_stud():
         students = await AsyncORM.select_students()
         return students
+    
+    @app.post("/students_by_school_id")
+    async def get_stud(request: StudentFindReq):
+        students = await AsyncORM.select_students_by_school_id(**request.dict())
+        return students
 
     @app.get("/master_classes/today")
     async def get_mc():
@@ -51,6 +61,10 @@ def create_fastapi_app():
     # @app.get("/students")
     # async def auth_teacher(request: TeacherAuthRequest):
     #     return await AsyncORM.select_students_by_teacher_id(teacher)
+    
+    @app.post("/teacher/auth")
+    async def auth_student(request: TeacherAuthRequest):
+        return await AsyncORM.auth_teacher(**request.dict())
     
     @app.post("/student/auth")
     async def auth_student(request: StudentAuthRequest):
@@ -66,14 +80,29 @@ def create_fastapi_app():
 app = create_fastapi_app()
 
 async def main():
-    await AsyncORM.create_tables()
-    await AsyncORM.insert_students()
-    await AsyncORM.select_students()
-    await AsyncORM.create_admin("adm","password_adm_rea")
+    try:
+        await AsyncORM.create_tables()
+        await AsyncORM.insert_students()
+        await AsyncORM.select_students()
+        logging.info("SUCCESS!!!")
+        print("БД раскатана!")
+        await start_parse_excel()
+    except Exception as e:
+        print(f"Ошибка при раскатке БД: {str(e)}")
+        sys.exit(1)
+    
 
 
 if __name__ == "__main__":
     if "--webserver" in sys.argv:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler("app.log"),
+                logging.StreamHandler()
+            ]
+        )
         uvicorn.run(
             app="main:app",  # Используем текущий файл
             host="0.0.0.0",

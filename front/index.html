@@ -25,9 +25,20 @@
             const j3 = {
                     date_time:new Date(),
                 }
+
+            const j4 = {
+                    login:"test",
+                    password:"zxc123",
+                }
+
+            const j5 = {
+                    id_school:1,
+                }
             // await fet1_post(j1,'student/auth/')
             // await fet1_post(j2,'student/get_info_by_id/')
             await fet1_get('master_classes/today/')
+            await fet1_post(j5,'students_by_school_id')
+            await fet1_post(j4,'teacher/auth')
         } catch (error) {
             console.error('Fetch error:', error)
         }
