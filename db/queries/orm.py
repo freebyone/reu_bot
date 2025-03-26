@@ -56,41 +56,49 @@ class AsyncORM:
             return students_data
 
     @staticmethod
-    async def auth_student(name,surname,father_name):
+    async def auth_student(first_name,second_name):
         async with async_session_factory() as session:
-            clean_surname = surname.strip().lower()
-            clean_name = name.strip().lower()
-            clean_father_name = father_name.strip().lower()
-
+            clean_surname = second_name.strip().lower()
+            clean_name = first_name.strip().lower()
+            print(clean_name,clean_surname)
             query = select(
                 Students,
                 School.school_name,
-                Product.product_name
+                Product
             ).join(
                 School, Students.id_school == School.id
             ).join(
                 Product, Students.id_product == Product.id
             ).where(
                 func.lower(Students.surname) == clean_surname,
-                func.lower(Students.name) == clean_name,
-                func.lower(Students.father_name) == clean_father_name
+                func.lower(Students.name) == clean_name
             )
 
             result = await session.execute(query)
-            student_data = result.first()
-
+            student_data = result.all()
+            print(student_data)
+            data: list[Students] = []
+            for student in student_data:
+                st = {
+                    "id": student.Students.id,
+                    "second_name": student.Students.surname,
+                    "name": student.Students.name,
+                    "father_name": student.Students.father_name,
+                    "school_name": student.school_name,
+                    "project_name": student.Product.product_name,
+                    "school_class": student.Students.grade,
+                    "project_slot": student.Product.location,
+                    "project_format": student.Product.project_format,
+                    "project_datetime_start": student.Product.date_time_start,
+                    "project_datetime_end": student.Product.date_time_end
+                }
+                data.append(st)
+            import pprint
+            pprint.pprint(data)
             if student_data:
                 return {
                     "status": "success",
-                    "data": {
-                        "id": student_data.Students.id,
-                        "surname": student_data.Students.surname,
-                        "name": student_data.Students.name,
-                        "father_name": student_data.Students.father_name,
-                        "school": student_data.school_name,
-                        "project_name": student_data.product_name,
-                        "grade": student_data.Students.grade
-                    }
+                    "data": data
                 }
             return {"status": "not_found", "message": "Студент не найден"}
 
@@ -99,7 +107,12 @@ class AsyncORM:
     async def auth_teacher(login, password):
         async with async_session_factory() as session:
             # Ищем учителя по логину
-            query = select(Teacher).where(Teacher.login == login)
+            query = select(
+                Teacher,
+                School
+            ).where(
+                Teacher.login == login
+            )
             result = await session.execute(query)
             teacher = result.scalars().first()
             
@@ -203,20 +216,37 @@ class AsyncORM:
 
     @staticmethod
     async def get_master_classes():
+        from datetime import datetime, date
+        from sqlalchemy import func
         async with async_session_factory() as session:
-            import datetime
-            date_time = datetime.datetime.now()
-            print(date_time)
-            print('\n')
-            #TODO: порешать вопросик с датами
-            query = select(MasterClass).where(MasterClass.date_time_start == date_time)
-            result = await session.execute(query)
-            master_classes = result.scalars().all()
-            mc_list = [master_class.to_dict() for master_class in master_classes]
-            if mc_list:
-                return mc_list
-            return {"status": "not_found", "message": "Мастерклассы не найдены"}
+            try:
+                today = date.today()
+                next_year_date = date(today.year + 1, 1, 1)
 
+                query = select(MasterClass).where(
+                    func.date(MasterClass.date_time_start) >= today,
+                    func.date(MasterClass.date_time_start) < next_year_date
+                )
+                
+                result = await session.execute(query)
+                master_classes = result.scalars().all()
+                
+                if not master_classes:
+                    return []
+                mc = [{
+                    "id":master_class.id,
+                    "title": master_class.name,
+                    "link":master_class.url_link,
+                    "data":master_class.date_time_start
+                    } for master_class in master_classes]
+                import pprint
+                pprint.pprint(mc)
+                return mc
+               
+                
+            except Exception as e:
+                print(f"Ошибка: {e}")
+                return []
 
 
 

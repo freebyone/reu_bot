@@ -3,7 +3,7 @@ import os
 import sys
 
 import uvicorn
-from fastapi import FastAPI,Depends
+from fastapi import FastAPI,Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
@@ -18,9 +18,8 @@ from db.queries.orm import AsyncORM
 from pydantic import BaseModel
 
 class StudentAuthRequest(BaseModel):
-    name: str
-    surname: str
-    father_name: str
+    first_name: str
+    second_name: str
 
 class StudentInfoReq(BaseModel):
     id: int
@@ -53,7 +52,7 @@ def create_fastapi_app():
         students = await AsyncORM.select_students_by_school_id(**request.dict())
         return students
 
-    @app.get("/master_classes/today")
+    @app.get("/workshops")
     async def get_mc():
         mc = await AsyncORM.get_master_classes()
         return mc
@@ -66,9 +65,18 @@ def create_fastapi_app():
     async def auth_student(request: TeacherAuthRequest):
         return await AsyncORM.auth_teacher(**request.dict())
     
-    @app.post("/student/auth")
+    @app.post("/speaker/search")
     async def auth_student(request: StudentAuthRequest):
-        return await AsyncORM.auth_student(**request.dict())
+        result = await AsyncORM.auth_student(**request.dict())
+        
+        if result.get("status") == "not_found":
+            raise HTTPException(
+                status_code=403,
+                detail="Студент не найден",
+                headers={"X-Error": "Student not found"}
+            )
+        
+        return result
 
     @app.post("/student/get_info_by_id")
     async def get_student_info(request: StudentInfoReq):

@@ -216,7 +216,8 @@ async def process_data(session: AsyncSession,filename: str = "file.xlsx"):
                     date_time_start=start_time,
                     date_time_end=end_time,
                     id_school=school_id,
-                    location=str(row['Аудитория'])
+                    location=str(row['Аудитория']),
+                    project_format=str(row['Формат выступления']),
                 )
                 session.add(product)
                 await session.flush()

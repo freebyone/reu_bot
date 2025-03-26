@@ -23,6 +23,7 @@ class Product(Base):
     location = sql.Column(sql.String(1024))
     url_scheme = sql.Column(sql.String(1024))
     id_conference = sql.Column(sql.Integer, sql.ForeignKey('conference.id', ondelete="CASCADE"))
+    project_format = sql.Column(sql.String(1024))
 
 class Conference(Base):
     __tablename__ = 'conference'
