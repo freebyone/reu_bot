@@ -25,7 +25,7 @@ async def search_speaker(full_name: str) -> dict:
             print(resp)
             if resp.status == 200:
                 return await resp.json()
-            if resp.status == 403:
+            if resp.status == 401:
                 return None
             text = await resp.text()
             raise ApiError(f"Unexpected status {resp.status}: {text}")
@@ -53,11 +53,11 @@ async def auth_chaperone(login: str, password: str) -> dict:
             text = await resp.text()
             raise ApiError(f"Unexpected status {resp.status}: {text}")
 
-async def get_speaker_details(speaker_id: str) -> dict:
+async def get_speaker_details(project_id: str) -> dict:
     """
     Отправляет GET-запрос на /speaker/<id> для получения детальной информации о спикере.
     """
-    url = f"{API_BASE_URL}/speaker/{speaker_id}"
+    url = f"{API_BASE_URL}/speaker/{project_id}"
     async with aiohttp.ClientSession() as session:
         async with session.get(url, timeout=5) as resp:
             if resp.status == 200:

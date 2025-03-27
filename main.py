@@ -22,7 +22,7 @@ class StudentAuthRequest(BaseModel):
     second_name: str
 
 class StudentInfoReq(BaseModel):
-    id: int
+    project_id: int
 
 class TeacherAuthRequest(BaseModel):
     login: str
@@ -63,7 +63,16 @@ def create_fastapi_app():
     
     @app.post("/teacher/auth")
     async def auth_student(request: TeacherAuthRequest):
-        return await AsyncORM.auth_teacher(**request.dict())
+        result = await AsyncORM.auth_teacher(**request.dict())
+        
+        if result.get("status") == "not_found":
+            raise HTTPException(
+                status_code=401,
+                detail="Учитель не найден",
+                headers={"X-Error": "Teacher not found"}
+            )
+            
+        return result
     
     @app.post("/speaker/search")
     async def auth_student(request: StudentAuthRequest):
@@ -71,16 +80,16 @@ def create_fastapi_app():
         
         if result.get("status") == "not_found":
             raise HTTPException(
-                status_code=403,
+                status_code=401,
                 detail="Студент не найден",
                 headers={"X-Error": "Student not found"}
             )
         
         return result
 
-    @app.post("/student/get_info_by_id")
-    async def get_student_info(request: StudentInfoReq):
-        return await AsyncORM.find_student_data_by_id(request.id)
+    @app.get("/speaker/{project_id}")
+    async def get_student_info(project_id):
+        return await AsyncORM.find_student_data_by_id(int(project_id))
     
     return app
     

@@ -90,7 +90,9 @@ class AsyncORM:
                     "project_slot": student.Product.location,
                     "project_format": student.Product.project_format,
                     "project_datetime_start": student.Product.date_time_start,
-                    "project_datetime_end": student.Product.date_time_end
+                    "project_datetime_end": student.Product.date_time_end,
+                    "image_url": student.Product.url_scheme,
+                    
                 }
                 data.append(st)
             import pprint
@@ -109,21 +111,59 @@ class AsyncORM:
             # Ищем учителя по логину
             query = select(
                 Teacher,
-                School
+                School,
+                Product,
+                Students
             ).where(
                 Teacher.login == login
+            ).join(
+                School, Teacher.id_school == School.id
+            ).join(
+                Students, Teacher.id_school == Students.id_school
+            ).join(
+                Product, Students.id_product == Product.id
             )
             result = await session.execute(query)
-            teacher = result.scalars().first()
+            teacher = result.all()
+            print(teacher)
             
+                
             if not teacher:
                 return {"status": "not_found", "message": "Учитель не найден"}
+            
+            
+            if not teacher[0].Teacher.check_password(password):
+                    return {"status": "not_found", "message": "Неверный логин или пароль"}
+            import pprint 
                 
-            # Проверяем пароль
-            if not teacher.check_password(password):
-                return {"status": "not_found", "message": "Неверный логин или пароль"}
-            teacher = teacher.to_dict()
-            return {"status": "success", "data":teacher,"admin":teacher['admin']}
+            returns_projects = []
+            for student in teacher:
+                # Проверяем пароль
+                pprint.pprint( student.Students.surname+' '+student.Students.name+' '+student.Students.father_name)
+                returns_projects.append({
+                    "id": student.Students.id_product,
+                    "name": student.Students.surname+' '+student.Students.name+' '+student.Students.father_name,
+                    "school_name": student.School.school_name,
+                    "project_name": student.Product.product_name,
+                    "project_slot": student.Product.location,
+                    "project_format": student.Product.project_format,
+                    "project_datetime_start": student.Product.date_time_start,
+                    "project_datetime_end": student.Product.date_time_end,
+                })
+            # teacher = teacher.to_dict()
+            pprint.pprint(returns_projects)
+            return {
+                "status": "success", 
+                "projects":returns_projects, 
+                "user": {
+                    "id":teacher[0].Teacher.id,
+                    # "name":teacher.Teachers.surname,
+                    "login": teacher[0].Teacher.login, 
+                    "password": teacher[0].Teacher.password, 
+                    "school_name": teacher[0].School.school_name,
+                    "admin": teacher[0].Teacher.admin,
+                } 
+            }
 
     # async def get_current_teacher(credentials: HTTPBasicCredentials = Depends(security)):
     #     async with async_session_factory() as session:
@@ -162,6 +202,19 @@ class AsyncORM:
             }
 
     @staticmethod
+    # @auth_required
+    async def select_project_by_id(id_product):
+        async with async_session_factory() as session:
+            # Получаем всех студентов учителя с указанным id учебного заведения
+            query = select(Product).where(Product.id == id_school)
+            result = await session.execute(query)
+            students = result.scalars().all()
+            
+            return {
+                "students": [s.to_dict() for s in students],
+            }
+            
+    @staticmethod
     async def create_admin(log,password):
         async with async_session_factory() as session:
             new_teacher = Teacher(
@@ -173,7 +226,7 @@ class AsyncORM:
             await session.commit()
 
     @staticmethod
-    async def find_student_data_by_id(id):
+    async def find_student_data_by_id(project_id):
         async with async_session_factory() as session:
             query = select(
                 Students,
@@ -186,31 +239,39 @@ class AsyncORM:
                 Product, Students.id_product == Product.id
             ).outerjoin(
                 Conference, Product.id_conference == Conference.id
-            ).where(Students.id == 1)
+            ).where(Product.id == project_id)
             #TODO: catch errors and what if table data with join or outerjoin didnt find?
 
             result = await session.execute(query)
             # s = [student.to_dict() for student in result.scalars().all()]
-            student_data = result.first()
-            print(student_data.Product.product_name)
+            student_data = result.all()
+            import pprint
+            
+            
     
             if student_data:
+                returns_data = []
+                for student in student_data:
+                    print(student.Students.surname)
+                    returns_data.append({
+                        "id": student.Students.id,
+                        "surname": student.Students.surname,
+                        "name": student.Students.name,
+                        "father_name": student.Students.father_name,
+                        "section": student.Product.section,
+                        "image_url": student.Product.url_scheme,
+                        "school_name": student.School.school_name,
+                        "project_name": student.Product.product_name,
+                        "school_class": student.Students.grade,
+                        "project_slot": student.Product.location,
+                        "project_format": student.Product.project_format,
+                        "project_datetime_start": student.Product.date_time_start,
+                        "project_datetime_end": student.Product.date_time_end
+                    })
+                    
                 return {
                     "status": "success",
-                    "data": {
-                        "id": student_data.Students.id,
-                        "surname": student_data.Students.surname,
-                        "name": student_data.Students.name,
-                        "father_name": student_data.Students.father_name,
-                        "section": student_data.Product.section,
-                        "project_name": student_data.Product.product_name,
-                        "school": student_data.School.school_name,
-                        "grade": student_data.Students.grade,
-                        "date_time": student_data.Product.date_time,
-                        "location": student_data.Product.location,
-                        "url_scheme": student_data.Product.url_scheme,
-                        # "conf_name": student_data.Conference.name,
-                    }
+                    "data": returns_data
                 }
             return {"status": "not_found", "message": "Студент не найден"}
 

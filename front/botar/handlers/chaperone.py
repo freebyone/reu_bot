@@ -86,11 +86,14 @@ async def receive_password(message: Message, state: FSMContext):
         return
     # teacher_data ожидается в формате:
     # {
-    #   "projects": [ { "id": "...", "name": "..." }, ... ],
+    #   "projects": [ { "id": "...", "name_student": "..." }, ... ],
     #   "user": { "id": "...", "login": "...", "password": "...", "school_name": "№17" }
     # }
+    
     teacher_user = teacher_data.get("user", teacher_data)
     projects = teacher_data.get("projects", [])
+    print(teacher_user,'\n')
+    print(projects,'\n')
     await state.update_data(teacher=teacher_user, projects=projects, authorized_role="companion")
     await state.set_state(ChaperoneState.main_menu)
     await show_chaperone_menu(message, state)
@@ -191,17 +194,21 @@ async def show_project_details(callback: CallbackQuery, state: FSMContext):
             await callback.message.answer(f"❌ Ошибка получения данных выступления: {e}")
             return
         await state.update_data({f"project_{project_id}": project_details})
+    team_names = ""
+    print(project_details)
+    for project in project_details['data']:
+        team_names = team_names + ' ' + project['surname'] + ' ' + project['name'] + ' ' + project['father_name'] + '\n'
     info_text = (
-        f"**Детали выступления:**\n\n"
-        f"👤 **Имя:** {project_details.get('name', 'не указано')}\n"
-        f"📝 **Проект:** {project_details.get('project_name', 'не указан')}\n"
-        f"🎤 **Формат:** {project_details.get('project_format', 'не указан')}\n"
-        f"🔢 **Слот:** {project_details.get('project_slot', 'не указан')}\n"
-        f"⏰ **Время:** {project_details.get('project_time', 'не указано')}\n"
-        f"🏫 **Класс:** {project_details.get('school_class', 'не указан')}\n"
-        f"📚 **Школа:** {project_details.get('school_name', 'не указана')}\n\n"
-        f"Нажми кнопку ниже, чтобы вернуться к списку выступлений."
-    )
+            f"**Детали выступления:**\n\n"
+            f"""👤 **Команда:** \n{team_names}"""
+            f"📝 **Проект:** {project_details['data'][0].get('project_name', 'не указан')}\n"
+            f"🎤 **Формат:** {project_details['data'][0].get('project_format', 'не указан')}\n"
+            f"🔢 **Слот:** {project_details['data'][0].get('project_slot', 'не указан')}\n"
+            f"⏰ **Время:** {project_details['data'][0].get('project_datetime_start', 'не указано')} — {project_details['data'][0].get('project_datetime_end', 'не указано')}\n"
+            f"🏫 **Класс:** {project_details['data'][0].get('school_class', 'не указан')}\n"
+            f"📚 **Школа:** {project_details['data'][0].get('school_name', 'не указана')}\n\n"
+            f"Нажми кнопку ниже, чтобы вернуться к списку выступлений."
+        )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Назад", callback_data="companion_projects")]
     ])
