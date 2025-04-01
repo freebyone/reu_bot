@@ -11,4 +11,5 @@ class ChaperoneState(StatesGroup):
     entering_password = State()  # Waiting for teacher password
     main_menu = State()          # Teacher main menu (after successful auth)
     viewing_students = State()   # (Optional) State when viewing student list (for pagination)
+    admin_upload = State()
     # Note: workshop viewing could reuse the same state or separate, but we handle via callbacks.

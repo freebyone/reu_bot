@@ -4,21 +4,23 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from services import api_client
 from datetime import datetime, date
+from lang import back
+from utils.validators import format_datetime, months
 
 router = Router()  # Router for workshop-related handlers
 
 # Словарь для перевода дней недели
 DAYS_RU = {
-    "Monday": "Пн",
-    "Tuesday": "Вт",
-    "Wednesday": "Ср",
-    "Thursday": "Чт",
-    "Friday": "Пт",
-    "Saturday": "Сб",
-    "Sunday": "Вс"
+    "Monday": "Понедельник",
+    "Tuesday": "Вторник",
+    "Wednesday": "Среда",
+    "Thursday": "Четверг",
+    "Friday": "Пятница",
+    "Saturday": "Суббота",
+    "Sunday": "Воскресенье"
 }
 
-@router.message(F.text == "Мастер-классы 🎓")
+@router.message(F.text == "Мастер-классы 📐")
 async def list_workshop_days(message: Message, state: FSMContext):
     """Показывает доступные будущие дни мастер-классов с указанием дня недели."""
     # workshops = []
@@ -57,10 +59,10 @@ async def list_workshop_days(message: Message, state: FSMContext):
     for date_obj in sorted_dates:
         day_name = DAYS_RU.get(date_obj.strftime("%A"), "")
         # Форматируем текст кнопки: (день недели)DD.MM.YYYY
-        date_display = f"({day_name}){date_obj.strftime('%d.%m.%Y')}"
+        date_display = f"{day_name} - {date_obj.day} {months[date_obj.month]}"
         buttons.append([InlineKeyboardButton(text=date_display, callback_data=f"workshop_{date_obj.isoformat()}")])
     # Добавляем кнопку "Назад" для возврата в главное меню
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="workshop_main_menu")])
+    buttons.append([InlineKeyboardButton(text=back, callback_data="workshop_main_menu")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     # Сохраняем сгруппированные данные в состоянии
     await state.update_data(workshops_by_date={d.isoformat(): workshops_by_date[d] for d in workshops_by_date})
@@ -71,27 +73,33 @@ async def workshop_main_menu(callback: CallbackQuery, state: FSMContext):
     """Возвращает пользователя в главное меню, используя сохранённую роль из состояния."""
     await callback.answer()
     data = await state.get_data()
+    
     role = data.get("authorized_role")
+    
     if role == "companion":
         from handlers.chaperone import show_chaperone_menu
         await show_chaperone_menu(callback.message, state)
     elif role == "speaker":
-        from handlers.speaker import show_conference
-        await show_conference(callback.message, state)
+        from handlers.speaker import conference_back
+        await callback.answer()
+        await callback.message.delete()
+        # await conference_back(callback.message, state)
     else:
         # Если переменная не установлена, пытаемся определить по наличию данных
         if data.get("teacher") and data.get("projects"):
             from handlers.chaperone import show_chaperone_menu
             await show_chaperone_menu(callback.message, state)
         elif data.get("speaker"):
-            from handlers.speaker import show_conference
-            await show_conference(callback.message, state)
+            from handlers.speaker import conference_back
+            await callback.answer()
+            await callback.message.delete()
+            # await conference_back(callback.message, state)
         else:
             # Базовый вариант
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
             main_menu_kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Моя конференция 📅", callback_data="show_conference")],
-                [InlineKeyboardButton(text="Мастер-классы 🎓", callback_data="show_workshops")]
+                [InlineKeyboardButton(text="Мастер-классы 📐", callback_data="show_workshops")]
             ])
             try:
                 await callback.message.edit_text("Главное меню:", reply_markup=main_menu_kb)
@@ -103,11 +111,12 @@ async def workshop_main_menu(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "show_workshops")
 async def callback_show_workshops(callback: CallbackQuery, state: FSMContext):
     """
-    Обрабатывает нажатие кнопки "Мастер-классы 🎓" из главного меню спикера,
+    Обрабатывает нажатие кнопки "Мастер-классы 📐" из главного меню спикера,
     вызывая функцию list_workshop_days.
     """
     await callback.answer()
     await list_workshop_days(callback.message, state)
+
 
 @router.callback_query(F.data.startswith("workshop_") & ~F.data.in_(["workshop_back"]))
 async def list_workshops_on_day(callback: CallbackQuery, state: FSMContext):
@@ -124,7 +133,7 @@ async def list_workshops_on_day(callback: CallbackQuery, state: FSMContext):
     date_obj = datetime.fromisoformat(iso_date).date()
     day_name = DAYS_RU.get(date_obj.strftime("%A"), "")
     # Форматируем дату с днем недели для сообщения
-    date_str = f"({day_name}){date_obj.strftime('%d.%m.%Y')}"
+    date_str = f"{day_name} - {date_obj.day} {months[date_obj.month]}"
     # Формируем inline клавиатуру: каждая кнопка – мастер-класс с URL-ссылкой
     buttons = []
     for ev in events:
@@ -137,13 +146,15 @@ async def list_workshops_on_day(callback: CallbackQuery, state: FSMContext):
         else:
             buttons.append([InlineKeyboardButton(text=button_text, callback_data="no_link")])
     # Добавляем кнопку "Назад" для возврата к выбору дня
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="workshop_back")])
+    buttons.append([InlineKeyboardButton(text=back, callback_data="workshop_back")])
+    
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await callback.message.answer(f"*Мастер-классы на {date_str}:*", reply_markup=kb, parse_mode="Markdown", disable_web_page_preview=True)
 
 @router.callback_query(F.data == "workshop_back")
 async def workshop_back(callback: CallbackQuery, state: FSMContext):
     """Возвращает пользователя к выбору дня мастер-классов с указанием дня недели в кнопках."""
+    await callback.message.delete()
     from datetime import date  # убедимся, что импортирован
     await callback.answer()
     data = await state.get_data()
@@ -165,9 +176,9 @@ async def workshop_back(callback: CallbackQuery, state: FSMContext):
     buttons = []
     for date_obj in sorted_dates:
         day_name = DAYS_RU.get(date_obj.strftime("%A"), "")
-        date_display = f"({day_name}){date_obj.strftime('%d.%m.%Y')}"
+        date_display = f"({day_name}){format_datetime(date_obj.isoformat())}"
         buttons.append([InlineKeyboardButton(text=date_display, callback_data=f"workshop_{date_obj.isoformat()}")])
     # Добавляем кнопку "Назад" для возврата в главное меню выбора конференции/мастер-классов
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="workshop_main_menu")])
+    buttons.append([InlineKeyboardButton(text=back, callback_data="workshop_main_menu")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await callback.message.answer("Выбери день:", reply_markup=kb)
+    # await callback.message.answer("Выбери день:", reply_markup=kb)

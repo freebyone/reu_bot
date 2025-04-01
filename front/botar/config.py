@@ -1,4 +1,10 @@
 # config.py
-BOT_TOKEN = "7743883203:AAHfyEaYpMRUNWN9T_jrbBd0lWkoqzQHU6k"
-API_BASE_URL = "http://127.0.0.1:8000"  # Base URL for conference API
-REDIS_DSN = "redis://localhost:6379/0"  # Redis connection string
+import os
+from dotenv import load_dotenv
+
+# Загрузить переменные окружения из файла .env в текущей директории
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL")
+REDIS_DSN = os.getenv("REDIS_DSN")

@@ -12,11 +12,11 @@ async def speaker_command(message: Message, state: FSMContext):
     data = await state.get_data()
     print(data)
     if data.get("speaker"):
-        await message.answer("Вы уже авторизованы как спикер. Перехожу в меню спикера...")
+        await message.answer("Вы уже авторизованы как участник. Перехожу в меню участника...")
         from handlers.speaker import show_speaker_menu
         await show_speaker_menu(message, state)
     else:
-        await message.answer("Вы не авторизованы как спикер. Пожалуйста, нажмите /start и выберите роль 'Спикер 🎤' для авторизации.")
+        await message.answer("Вы не авторизованы как участник. Пожалуйста, нажмите /start и выберите роль 'Участник 🎤' для авторизации.")
 
 @router.message(Command("companion"))
 async def companion_command(message: Message, state: FSMContext):
@@ -29,8 +29,13 @@ async def companion_command(message: Message, state: FSMContext):
 
 @router.message(Command("help"))
 async def help_command(message: Message):
-    await message.answer("Для того чтобы связаться с администратором позвоните по номеру +7 (777) 777 77-77 доб 7777")
+    await message.answer("Для того чтобы связаться с администратором позвоните по номеру [+7 (777) 777 77-77](tel:+79991234567) доб 7777", parse_mode="Markdown")
 
 @router.message(Command("start"))
 async def start_cmd(message: Message):
     await message.answer("Начало работы бота. Пожалуйста, выберите роль.")
+
+@router.message(Command("reset"))
+async def start_cmd(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Сбросили ваши данные для авторизации 🗑️")

@@ -109,6 +109,21 @@ class AsyncORM:
     async def auth_teacher(login, password):
         async with async_session_factory() as session:
             # Ищем учителя по логину
+            # query = select(
+            #     Teacher,
+            #     School,
+            #     Product,
+            #     Students
+            # ).where(
+            #     Teacher.login == login
+            # ).join(
+            #     School, Teacher.id_school == School.id
+            # ).join(
+            #     Students, Teacher.id_school == Students.id_school
+            # ).join(
+            #     Product, Students.id_product == Product.id
+            # )
+
             query = select(
                 Teacher,
                 School,
@@ -116,13 +131,15 @@ class AsyncORM:
                 Students
             ).where(
                 Teacher.login == login
-            ).join(
+            ).outerjoin(
                 School, Teacher.id_school == School.id
-            ).join(
+            ).outerjoin(
                 Students, Teacher.id_school == Students.id_school
-            ).join(
+            ).outerjoin(
                 Product, Students.id_product == Product.id
             )
+
+            
             result = await session.execute(query)
             teacher = result.all()
             print(teacher)
@@ -137,33 +154,43 @@ class AsyncORM:
             import pprint 
                 
             returns_projects = []
-            for student in teacher:
-                # Проверяем пароль
-                pprint.pprint( student.Students.surname+' '+student.Students.name+' '+student.Students.father_name)
+            for record in teacher:
+                teacher_obj, school_obj, product_obj, student_obj = record
+                # Если учётная запись admin, то связанных данных о студентах может не быть
+                if teacher_obj.admin:
+                    # Формируем имя для админа, можно использовать, например, логин или пустую строку
+                    full_name = teacher_obj.login
+                else:
+                    # Если студент отсутствует, пропускаем запись
+                    if student_obj is None:
+                        continue
+                    full_name = f"{student_obj.surname or ''} {student_obj.name or ''} {student_obj.father_name or ''}".strip()
+                
                 returns_projects.append({
-                    "id": student.Students.id_product,
-                    "name": student.Students.surname+' '+student.Students.name+' '+student.Students.father_name,
-                    "school_name": student.School.school_name,
-                    "project_name": student.Product.product_name,
-                    "project_slot": student.Product.location,
-                    "project_format": student.Product.project_format,
-                    "project_datetime_start": student.Product.date_time_start,
-                    "project_datetime_end": student.Product.date_time_end,
+                    "id": product_obj.id if product_obj else None,
+                    "name": full_name,
+                    "school_name": school_obj.school_name if school_obj else None,
+                    "project_name": product_obj.product_name if product_obj else None,
+                    "project_slot": product_obj.location if product_obj else None,
+                    "project_format": product_obj.project_format if product_obj else None,
+                    "project_datetime_start": product_obj.date_time_start if product_obj else None,
+                    "project_datetime_end": product_obj.date_time_end if product_obj else None,
                 })
+
             # teacher = teacher.to_dict()
             pprint.pprint(returns_projects)
             return {
                 "status": "success", 
-                "projects":returns_projects, 
+                "projects": returns_projects, 
                 "user": {
-                    "id":teacher[0].Teacher.id,
-                    # "name":teacher.Teachers.surname,
+                    "id": teacher[0].Teacher.id,
                     "login": teacher[0].Teacher.login, 
                     "password": teacher[0].Teacher.password, 
-                    "school_name": teacher[0].School.school_name,
+                    "school_name": teacher[0].School.school_name if teacher[0].School else None,
                     "admin": teacher[0].Teacher.admin,
                 } 
             }
+
 
     # async def get_current_teacher(credentials: HTTPBasicCredentials = Depends(security)):
     #     async with async_session_factory() as session:

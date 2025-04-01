@@ -126,7 +126,7 @@ async def process_data(session: AsyncSession,filename: str = "file.xlsx"):
             "file.xlsx",
             sheet_name="Учителя",
             header=0,
-            names=["ФИО", "Школа"]
+            names=["ФИО", "Школа", "login", "password"]
         )
         
         df_admin = pd.read_excel(
@@ -188,20 +188,21 @@ async def process_data(session: AsyncSession,filename: str = "file.xlsx"):
                 surname, name, father_name = parse_fio(row['ФИО'])
                 
                 teacher = Teacher(
-                    surname=surname,
-                    name=name,
-                    father_name=father_name,
-                    id_school=school_id,
-                    login=str("admin"),
+                surname=surname,
+                name=name,
+                father_name=father_name,
+                id_school=school_id,
+                login=str(row['login']),  # Берем логин из столбца "login"
                 )
-                teacher.set_password("admin")
+                teacher.set_password(row['password'])  # Устанавливаем пароль из столбца "password"
+
                 session.add(teacher)
                 # print(teacher.password)
                 # print("\n")
             # 4. Оригинальная обработка проектов и студентов 
             school_cache_projects = {}
             product_cache = {}
-            
+
             # Первый проход: проекты
             for idx, row in df_projects.iterrows():
                 school_id = await get_or_create_school(
@@ -210,14 +211,20 @@ async def process_data(session: AsyncSession,filename: str = "file.xlsx"):
                     school_cache_projects
                 )
                 start_time, end_time = parse_date_range(row['Дата_время'])
+                
+                # Генерация URL схемы для аудитории
+                audience = str(row['Аудитория']).strip()
+                url_scheme = f"https://example.com/audience/{audience}.jpg" if audience else None
+
                 product = Product(
                     section=str(row['Секция']),
                     product_name=str(row['Название проекта']),
                     date_time_start=start_time,
                     date_time_end=end_time,
                     id_school=school_id,
-                    location=str(row['Аудитория']),
+                    location=audience,
                     project_format=str(row['Формат выступления']),
+                    url_scheme=url_scheme  # Добавляем новое поле
                 )
                 session.add(product)
                 await session.flush()

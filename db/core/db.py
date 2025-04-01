@@ -2,16 +2,16 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 # import settings
 
-username = 'your_username'
-password = 'new_password'
+username = 'postgres'
+password = 'admin'
 host = '127.0.0.1'
 port = '5432'
-database = 'your_database'
-schema = "rea_bot"
+database = 'reu_db'
+schema = "reu_bot"
 
 async_engine = create_async_engine(
     url=f'postgresql+asyncpg://{username}:{password}@127.0.0.1:5432/{database}',
-    echo=False,
+    echo=True,
 ).execution_options(schema_translate_map={None:schema})
 
 async_session_factory = async_sessionmaker(async_engine)

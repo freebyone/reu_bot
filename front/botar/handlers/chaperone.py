@@ -1,19 +1,33 @@
-# handlers/chaperone.py
 from math import ceil
 from aiogram import Router, F
+import sys
+import subprocess
+import datetime
+from lang import back
+from aiogram.types import ReplyKeyboardRemove
+from utils.validators import  format_datetime
+from aiogram.enums import ParseMode
 from aiogram.types import (
     Message,
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
-    KeyboardButton
+    KeyboardButton,
+    InputFile,
+    ContentType
 )
+from config import REDIS_DSN
 from aiogram.fsm.context import FSMContext
+from aiogram.types.input_file import FSInputFile
+import os
+from pathlib import Path
 from states.states import ChaperoneState
 from services import api_client
+import redis.asyncio as redis
+from config import REDIS_DSN
 
-router = Router()  # Router for chaperone-related handlers
+router = Router()  # Router для обработчиков
 
 PER_PAGE = 8  # Максимальное число проектов на одной странице
 
@@ -36,7 +50,7 @@ async def start_chaperone(callback: CallbackQuery, state: FSMContext):
             resize_keyboard=True,
             one_time_keyboard=True
         )
-        await callback.message.answer("Введи свой логин, пожалуйста:", reply_markup=cancel_kb)
+        await callback.message.answer("Введи свой логин, пожалуйста:", reply_markup=cancel_kb, one_time_keyboard=True)
 
 @router.message(ChaperoneState.entering_login)
 async def receive_login(message: Message, state: FSMContext):
@@ -53,11 +67,11 @@ async def receive_login(message: Message, state: FSMContext):
         resize_keyboard=True,
         one_time_keyboard=True
     )
-    await message.answer("Введи свой пароль:", reply_markup=cancel_kb)
+    await message.answer("Введи свой пароль:", reply_markup=cancel_kb, one_time_keyboard=True)
 
 @router.message(ChaperoneState.entering_password)
 async def receive_password(message: Message, state: FSMContext):
-    """Пытается аутентифицировать тебя по введённым логину и паролю."""
+    """Пытается аутентифицировать по введённым логину и паролю."""
     password = message.text.strip()
     if password.lower() == "отмена":
         await message.answer("Вход отменён. Запусти /start, чтобы начать снова.")
@@ -75,46 +89,80 @@ async def receive_password(message: Message, state: FSMContext):
     except api_client.ApiError as e:
         err_text = str(e)
         await message.answer(f"❌ {err_text}")
-        # Возвращаем тебя к вводу логина
+        # Возвращаем к вводу логина
         await state.set_state(ChaperoneState.entering_login)
         cancel_kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="Отмена")]],
             resize_keyboard=True,
             one_time_keyboard=True
         )
-        await message.answer("Введи свой логин:", reply_markup=cancel_kb)
+        await message.answer("Введи свой логин:", reply_markup=cancel_kb, one_time_keyboard=True)
         return
-    # teacher_data ожидается в формате:
-    # {
-    #   "projects": [ { "id": "...", "name_student": "..." }, ... ],
-    #   "user": { "id": "...", "login": "...", "password": "...", "school_name": "№17" }
-    # }
-    
+
+    # Сохраняем данные пользователя, включая флаг администратора
     teacher_user = teacher_data.get("user", teacher_data)
     projects = teacher_data.get("projects", [])
-    print(teacher_user,'\n')
-    print(projects,'\n')
-    await state.update_data(teacher=teacher_user, projects=projects, authorized_role="companion")
+    print(teacher_data, '\n')
+    print(projects, '\n')
+    await state.update_data(
+        teacher=teacher_user,
+        projects=projects,
+        authorized_role="companion",
+        admin=teacher_user.get("admin")
+    )
     await state.set_state(ChaperoneState.main_menu)
+    # В зависимости от флага admin вызываем нужное меню
     await show_chaperone_menu(message, state)
 
 async def show_chaperone_menu(message: Message, state: FSMContext):
-    """Отображает главное меню для сопровождающего с inline-клавиатурой."""
+    """Отображает главное меню для сопровождающего или меню администратора."""
     data = await state.get_data()
+    # Если поле admin равно "true" (или True), запускаем отдельное меню для администратора
+    if data.get("admin") in [True, "true"]:
+        await show_admin_menu(message, state)
+        return
+    
+    if str(data.get("admin")).lower() == "true":
+        await show_admin_menu(message, state)
+        return
+        
     teacher = data.get("teacher", {})
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[
+            KeyboardButton(text="Выступления 🎤", callback_data="companion_projects"), 
+            KeyboardButton(text="Мастер-классы 📐", callback_data="show_workshops"), 
+            ]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+        )
     school_name = teacher.get("school_name", "не указана")
     menu_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Выступления 🎤", callback_data="companion_projects")],
-        [InlineKeyboardButton(text="Мастер-классы 🎓", callback_data="show_workshops")]
+        [InlineKeyboardButton(text="Мастер-классы 📐", callback_data="show_workshops")]
     ])
-    await message.answer(f"Привет, ты успешно вошёл! 📚 Школа: *{school_name}*", parse_mode="Markdown")
-    await message.answer("Главное меню:", reply_markup=menu_kb)
+    # await message.answer(f"Привет, ты успешно вошёл! 🏫 Школа: *{school_name}*", parse_mode="Markdown")
+    await message.answer(f"Вы успешно вошли!\nГлавное меню *Cопровождающего* 🎓\n🏫 Школа: *{school_name}*\n\nДля того, чтобы учавствовать в конкурсе- Можете заполнить форму [Вот здесь 📋](https://docs.google.com/forms/d/e/1FAIpQLSfixBj5boCuPkGYQ1yNUTt77P4_rbqrfbNCebt0e_NBHMrfDg/viewform?usp=header)",  disable_web_page_preview=True, parse_mode="Markdown", reply_markup=menu_kb)
+
+
+
+async def show_admin_menu(message: Message, state: FSMContext):
+    """Отображает меню администратора с инструкцией по загрузке нового файла."""
+    text = (
+        "Вы зашли как *администратор* 👑\n"
+        "📁 Чтобы загрузить новый файл с данными - прошу проверить на правильность, просмотрев этот файл.\n"
+        "А также прикрепленный файл: example.xlsx"
+    )
+    document = FSInputFile("example.xlsx")
+    await message.answer_document(document, caption=text, parse_mode="Markdown")
+    # Переводим состояние в ожидание загрузки нового Excel-файла
+    await state.set_state(ChaperoneState.admin_upload)
+
 
 # ----------------------------
-# Обработка кнопки "Выступления 🎤" с пагинацией
+# Обработка остальных функций (например, companion_projects, pagination, показ деталей выступления и т.д.)
 @router.callback_query(F.data == "companion_projects")
 async def companion_projects(callback: CallbackQuery, state: FSMContext):
-    """Отображает список твоих выступлений с пагинацией (если их больше 8)."""
+    """Отображает список выступлений с пагинацией (если их больше 8)."""
     print("DEBUG: companion_projects handler вызван")
     await callback.answer()
     data = await state.get_data()
@@ -129,7 +177,7 @@ async def companion_projects(callback: CallbackQuery, state: FSMContext):
             proj_name = proj.get("name", "Без имени")
             proj_id = proj.get("id")
             buttons.append([InlineKeyboardButton(text=proj_name, callback_data=f"project_{proj_id}")])
-        buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="companion_main_menu")])
+        buttons.append([InlineKeyboardButton(text=back, callback_data="companion_main_menu")])
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         await callback.message.answer("Выбери выступление:", reply_markup=kb)
     else:
@@ -160,7 +208,7 @@ async def display_projects_page(message: Message, state: FSMContext, page: int):
         nav_buttons.append(InlineKeyboardButton(text="→", callback_data=f"projects_page_{page+1}"))
     if nav_buttons:
         buttons.append(nav_buttons)
-    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="companion_main_menu")])
+    buttons.append([InlineKeyboardButton(text=back, callback_data="companion_main_menu")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer("Выбери выступление:", reply_markup=kb)
 
@@ -176,13 +224,13 @@ async def projects_page_callback(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "companion_main_menu")
 async def companion_main_menu(callback: CallbackQuery, state: FSMContext):
-    """Возвращает тебя в главное меню для сопровождающего."""
+    """Возвращает в главное меню для сопровождающего."""
     await callback.answer()
     await show_chaperone_menu(callback.message, state)
 
 @router.callback_query(F.data.startswith("project_"))
 async def show_project_details(callback: CallbackQuery, state: FSMContext):
-    """Отображает подробную информацию о выбранном выступлении с кнопкой 'Назад' для возврата к списку выступлений."""
+    """Отображает подробную информацию о выбранном выступлении с кнопкой 'Назад'."""
     await callback.answer()
     project_id = callback.data.split("_", 1)[1]
     data = await state.get_data()
@@ -197,22 +245,22 @@ async def show_project_details(callback: CallbackQuery, state: FSMContext):
     team_names = ""
     print(project_details)
     for project in project_details['data']:
-        team_names = team_names + ' ' + project['surname'] + ' ' + project['name'] + ' ' + project['father_name'] + '\n'
+        team_names += f" {project['surname']} {project['name']} {project['father_name']}\n"
     info_text = (
-            f"**Детали выступления:**\n\n"
-            f"""👤 **Команда:** \n{team_names}"""
-            f"📝 **Проект:** {project_details['data'][0].get('project_name', 'не указан')}\n"
-            f"🎤 **Формат:** {project_details['data'][0].get('project_format', 'не указан')}\n"
-            f"🔢 **Слот:** {project_details['data'][0].get('project_slot', 'не указан')}\n"
-            f"⏰ **Время:** {project_details['data'][0].get('project_datetime_start', 'не указано')} — {project_details['data'][0].get('project_datetime_end', 'не указано')}\n"
-            f"🏫 **Класс:** {project_details['data'][0].get('school_class', 'не указан')}\n"
-            f"📚 **Школа:** {project_details['data'][0].get('school_name', 'не указана')}\n\n"
-            f"Нажми кнопку ниже, чтобы вернуться к списку выступлений."
-        )
+        f"**Детали выступления:**\n\n"
+        f"👤 **Команда:** \n{team_names}"
+        f"📝 **Проект:** {project_details['data'][0].get('project_name', 'не указан')}\n"
+        f"🎤 **Формат:** {project_details['data'][0].get('project_format', 'не указан')}\n"
+        f"🔢 **Слот:** {int(float(project_details['data'][0].get('project_slot', 'не указан')))}\n"
+        f"⏰ **Время:** {format_datetime(project_details['data'][0].get('project_datetime_start', 'не указано'))} — {datetime.datetime.fromisoformat(project_details['data'][0].get('project_datetime_end', 'не указано')).strftime("%H:%M")}\n"
+        f"🏫 **Класс:** {project_details['data'][0].get('school_class', 'не указан')}\n"
+        f"📚 **Школа:** {project_details['data'][0].get('school_name', 'не указана')}\n\n"
+        "Нажми кнопку ниже, чтобы вернуться к списку выступлений 📋"
+    )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="companion_projects")]
+        [InlineKeyboardButton(text=back, callback_data="companion_projects")]
     ])
-    img_url = project_details.get("image_url")
+    img_url = project_details['data'][0].get("image_url")
     if img_url:
         try:
             await callback.message.answer_photo(photo=img_url, caption=info_text, parse_mode="Markdown", reply_markup=kb)
@@ -220,3 +268,38 @@ async def show_project_details(callback: CallbackQuery, state: FSMContext):
             await callback.message.answer(info_text, parse_mode="Markdown", reply_markup=kb)
     else:
         await callback.message.answer(info_text, parse_mode="Markdown", reply_markup=kb)
+
+
+@router.message(ChaperoneState.admin_upload)
+async def handle_admin_file(message: Message, state: FSMContext):
+    """Обработчик загрузки Excel-файла от администратора."""
+    document = message.document
+    if not document:
+        await message.answer("Пожалуйста, отправьте документ Excel (.xlsx)")
+        return
+
+    file_name = document.file_name
+    if not file_name.lower().endswith(".xlsx"):
+        await message.answer("Неверный формат файла. Загрузите файл Excel (.xlsx)")
+        return
+
+    # 1. Определяем путь к корню проекта (parents[2], если chaperone.py лежит в reu_bot/front/botar/handlers)
+    BASE_DIR = Path(__file__).resolve().parents[3]  # даёт /Users/temakulakov/reu_bot
+    save_path = BASE_DIR / "file.xlsx"
+    
+
+    # 2. Скачиваем файл через бот
+    bot = message.bot
+    file_info = await bot.get_file(document.file_id)
+    await bot.download_file(file_info.file_path, destination=save_path)
+
+    await message.answer("Файл успешно загружен и сохранён в корне проекта.\nЗапускаю main.py...")
+
+    # 3. Запускаем main.py в том же виртуальном окружении
+    main_script = BASE_DIR / "main.py"
+    try:
+        # subprocess.run блокирует текущий поток до завершения main.py
+        subprocess.run([sys.executable, str(main_script)], check=True)
+        await message.answer("main.py успешно отработал.")
+    except subprocess.CalledProcessError as e:
+        await message.answer(f"Ошибка при запуске main.py: {e}")
