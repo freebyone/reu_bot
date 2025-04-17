@@ -29,9 +29,9 @@ services:
   postgres:
     image: postgres:13-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: qwerty123
-      POSTGRES_DB: mydb
+      POSTGRES_USER: 
+      POSTGRES_PASSWORD: 
+      POSTGRES_DB: 
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
