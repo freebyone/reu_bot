@@ -1,2 +1,0 @@
-2025-03-23 11:57:46,176 - ERROR - Общая ошибка: Missing optional dependency 'openpyxl'.  Use pip or conda to install openpyxl.
-2025-03-23 11:57:46,176 - CRITICAL - Критическая ошибка: Missing optional dependency 'openpyxl'.  Use pip or conda to install openpyxl.
